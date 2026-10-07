@@ -53,7 +53,7 @@ Dữ liệu chỉ có 24,8% mẫu thu nhập cao. Mô hình luôn đoán "thu nh
 
 ## 5. Bonus
 
-- [ ] Bonus 1 - DagsHub: workflow đã hỗ trợ ba MLflow secrets, chờ cấu hình tài khoản.
+- [x] Bonus 1 - DagsHub: GitHub Actions đã ghi run MLflow lên tracking server từ ba secrets.
 - [x] Bonus 2 - Threshold: tốt nhất 0.30, F1 0.7537; mặc định 0.5 đạt 0.7354.
 - [x] Bonus 3 - Báo cáo confusion matrix, precision/recall và upload artifact; ưu tiên recall lớp dương để giảm bỏ sót.
 - [x] Bonus 4 - Chỉ deploy khi F1 mới đạt 0.65 và không thấp hơn production.
