@@ -49,7 +49,9 @@ jobs:
     needs: unit-test
     runs-on: ubuntu-latest
     outputs:
-      f1: ${{ steps.read_report.outputs.f1 }}
+      f1: ${{ steps.publish.outputs.f1 }}
+      previous_f1: ${{ steps.publish.outputs.previous_f1 }}
+      deploy: ${{ steps.publish.outputs.deploy }}
 
     steps:
       - uses: actions/checkout@v4
@@ -88,36 +90,71 @@ jobs:
         run: dvc pull data/train_batch1.csv.dvc data/holdout.csv.dvc
 
       - name: Train model
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_TRACKING_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_TRACKING_PASSWORD }}
         run: python src/train.py
 
-      - name: Read report
-        id: read_report
-        run: |
-          F1=$(python -c "import json; print(json.load(open('outputs/report.json'))['f1_score'])")
-          echo "f1=$F1" >> "$GITHUB_OUTPUT"
+      - name: Show precision and recall report
+        run: cat outputs/detail.txt
 
-      - name: Upload model to S3
+      - name: Compare and publish model
+        id: publish
         env:
           ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }}
         run: |
           python - <<'PYEOF'
+          import json
           import os
 
           import boto3
 
-          boto3.client("s3").upload_file(
-              "models/model.joblib",
-              os.environ["ARTIFACT_BUCKET"],
-              "artifacts/current/model.joblib",
-              ExtraArgs={"ServerSideEncryption": "AES256"},
-          )
+          bucket = os.environ["ARTIFACT_BUCKET"]
+          s3 = boto3.client("s3")
+          with open("outputs/report.json") as report_file:
+              report = json.load(report_file)
+          f1 = float(report["f1_score"])
+
+          try:
+              response = s3.get_object(Bucket=bucket, Key="artifacts/current/report.json")
+          except s3.exceptions.NoSuchKey:
+              previous_f1 = None
+          else:
+              with response["Body"] as body:
+                  previous_f1 = float(json.loads(body.read())["f1_score"])
+
+          deploy = f1 >= 0.65 and (previous_f1 is None or f1 >= previous_f1)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"f1={f1}\n")
+              output.write(f"previous_f1={previous_f1 if previous_f1 is not None else 'none'}\n")
+              output.write(f"deploy={str(deploy).lower()}\n")
+
+          print(f"Current F1: {f1:.4f}")
+          print(f"Previous F1: {previous_f1 if previous_f1 is not None else 'none'}")
+          if deploy:
+              for local_path, key in (
+                  ("models/model.joblib", "artifacts/current/model.joblib"),
+                  ("outputs/report.json", "artifacts/current/report.json"),
+              ):
+                  s3.upload_file(
+                      local_path,
+                      bucket,
+                      key,
+                      ExtraArgs={"ServerSideEncryption": "AES256"},
+                  )
+              print("Model accepted and published.")
+          else:
+              print("Model rejected; current production artifact remains unchanged.")
           PYEOF
 
       - name: Save report as artifact
         uses: actions/upload-artifact@v4
         with:
           name: report
-          path: outputs/report.json
+          path: |
+            outputs/report.json
+            outputs/detail.txt
 
 
   # ---------------------------------------------------------------------------
@@ -140,9 +177,18 @@ jobs:
         run: |
           python - <<'PYEOF'
           f1 = float("${{ needs.train.outputs.f1 }}")
+          previous_f1 = "${{ needs.train.outputs.previous_f1 }}"
           if f1 < 0.65:
               raise SystemExit(f"FAILED: f1_score {f1:.4f} < 0.65. Huy trien khai.")
-          print(f"PASSED: f1_score {f1:.4f} >= 0.65. Dang trien khai model.")
+          if "${{ needs.train.outputs.deploy }}" != "true":
+              raise SystemExit(
+                  f"FAILED: f1_score {f1:.4f} < production f1_score {previous_f1}. "
+                  "Giu model hien tai."
+              )
+          print(
+              f"PASSED: f1_score {f1:.4f} >= 0.65 and >= production "
+              f"f1_score {previous_f1}."
+          )
           PYEOF
 
 

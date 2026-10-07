@@ -20,13 +20,13 @@
 
 **Bộ siêu tham số đã chọn:** `n_estimators=200`, `learning_rate=0.1`, `max_depth=5`.
 
-**Lý do:** Lần chạy 3 có F1 cao nhất, đạt 0.7149 và vượt ngưỡng 0.65. Lần chạy 1 có accuracy cao hơn nhưng F1 thấp hơn, cho thấy accuracy chưa phản ánh tốt khả năng nhận diện lớp thu nhập cao. Cấu hình 50 cây với learning rate 0.05 chỉ đạt F1 0.6051 vì mô hình học chưa đủ. Tăng lên 200 cây và độ sâu 5 cải thiện F1, đổi lại thời gian huấn luyện cao hơn. Đây là cấu hình cân bằng tốt nhất trong ba thử nghiệm.
+**Lý do:** Lần chạy 3 có F1 cao nhất, đạt 0.7149. Lần chạy 1 có accuracy cao hơn nhưng F1 thấp hơn, cho thấy accuracy chưa phản ánh tốt lớp thiểu số. Cấu hình 50 cây học chưa đủ; 200 cây và độ sâu 5 cho kết quả tốt nhất.
 
 ---
 
 ## 2. Vì Sao Ngưỡng Chất Lượng Đặt Trên F1 Chứ Không Phải Accuracy
 
-Dữ liệu Adult mất cân bằng: 24,8% mẫu thuộc lớp thu nhập cao, 75,2% thuộc lớp thu nhập thấp. Mô hình luôn đoán "thu nhập thấp" vẫn đạt accuracy 75,2% dù không phát hiện được mẫu dương nào. F1 kết hợp precision và recall nên đánh giá trực tiếp khả năng dự đoán lớp thu nhập cao. Pipeline dùng `f1_score(y_eval, preds)` cho lớp dương, không dùng weighted average vì lớp đa số có thể kéo điểm lên; macro average cũng không đúng mục tiêu đánh giá riêng lớp dương. Vì vậy, Quality Gate dùng ngưỡng F1 0.65 để ngăn triển khai mô hình có accuracy cao nhưng bỏ sót phần lớn trường hợp thu nhập cao.
+Dữ liệu chỉ có 24,8% mẫu thu nhập cao. Mô hình luôn đoán "thu nhập thấp" vẫn đạt accuracy 75,2% nhưng không phát hiện mẫu dương. F1 kết hợp precision và recall nên phản ánh đúng lớp cần quan tâm. Pipeline tính F1 riêng lớp dương, không dùng weighted hoặc macro average vì chúng có thể che lấp hiệu quả trên lớp thiểu số. Quality Gate dùng ngưỡng 0.65 để chặn mô hình accuracy cao nhưng bỏ sót nhiều trường hợp thu nhập cao.
 
 ---
 
@@ -48,3 +48,13 @@ Dữ liệu Adult mất cân bằng: 24,8% mẫu thuộc lớp thu nhập cao, 7
 | Bước 3 (thêm `train_batch2`) | 0.7354 | 0.8820 |
 
 **Nhận xét:** Thêm 22.361 mẫu giúp F1 tăng 0.0205 và accuracy tăng 0.0080. Quan trọng hơn, commit dữ liệu đã tự động kích hoạt đủ bốn job và triển khai mô hình mới, chứng minh quy trình Continuous Training hoạt động.
+
+---
+
+## 5. Bonus
+
+- [ ] Bonus 1 - DagsHub: workflow đã hỗ trợ ba MLflow secrets, chờ cấu hình tài khoản.
+- [x] Bonus 2 - Threshold: tốt nhất 0.30, F1 0.7537; mặc định 0.5 đạt 0.7354.
+- [x] Bonus 3 - Báo cáo confusion matrix, precision/recall và upload artifact; ưu tiên recall lớp dương để giảm bỏ sót.
+- [x] Bonus 4 - Chỉ deploy khi F1 mới đạt 0.65 và không thấp hơn production.
+- [x] Bonus 5 - Positive rate 0.2478, chưa lệch quá 5 điểm phần trăm.

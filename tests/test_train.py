@@ -3,7 +3,7 @@ import json
 import mlflow
 import numpy as np
 import pandas as pd
-from src.train import train
+from src.train import _best_threshold, train
 
 
 FEATURE_NAMES = [
@@ -35,6 +35,12 @@ def _make_temp_data(tmp_path):
     df.iloc[160:].to_csv(eval_path, index=False)
 
     return train_path, eval_path
+
+
+def test_best_threshold():
+    threshold, score = _best_threshold([0, 1], [0.4, 0.6])
+    assert threshold == 0.45
+    assert score == 1.0
 
 
 def test_train_returns_float(tmp_path, monkeypatch):
@@ -69,6 +75,12 @@ def test_report_file_created(tmp_path, monkeypatch):
         report = json.load(f)
     assert "f1_score" in report
     assert "accuracy" in report
+    assert 0.1 <= report["best_threshold"] <= 0.9
+    assert "default_f1_score" in report
+    assert "positive_rate" in report
+    assert "data_drift_warning" in report
+    assert os.path.exists("outputs/detail.txt")
+    assert "class_1: precision=" in open("outputs/detail.txt").read()
 
 
 def test_model_file_created(tmp_path, monkeypatch):

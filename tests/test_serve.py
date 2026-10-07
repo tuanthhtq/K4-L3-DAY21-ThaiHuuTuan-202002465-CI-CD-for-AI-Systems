@@ -18,7 +18,6 @@ class FakeModel:
     def predict(self, rows):
         return [1 if rows[0][2] >= 10 else 0]
 
-
 @pytest.fixture
 def serve(monkeypatch, tmp_path):
     monkeypatch.setenv("ARTIFACT_BUCKET", "test-bucket")
